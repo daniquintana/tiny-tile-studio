@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tiny Tile Studio</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="hero-card">
+        <div class="hero-copy">
+          <p class="eyebrow">Local Pixel Art Workshop</p>
+          <h1>Tiny Tile Studio</h1>
+          <p class="hero-text">
+            Paint crisp little tiles like an Animal Crossing design board, but
+            with your own grid size, custom colors, transparency, and export
+            options.
+          </p>
+        </div>
+
+        <div class="hero-actions">
+          <button id="new-project" class="action-button">New Project</button>
+          <button id="clear-canvas" class="action-button action-button-muted">
+            Clear Grid
+          </button>
+          <button id="toggle-grid" class="action-button action-button-muted">
+            Hide Grid
+          </button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <aside class="sidebar">
+          <section class="panel-card">
+            <div class="panel-heading">
+              <div>
+                <p class="panel-kicker">Canvas</p>
+                <h2>Grid Setup</h2>
+              </div>
+            </div>
+
+            <div class="field-grid">
+              <label class="field">
+                <span>Columns</span>
+                <input
+                  id="grid-width"
+                  type="number"
+                  min="1"
+                  max="128"
+                  value="16"
+                />
+              </label>
+
+              <label class="field">
+                <span>Rows</span>
+                <input
+                  id="grid-height"
+                  type="number"
+                  min="1"
+                  max="128"
+                  value="16"
+                />
+              </label>
+            </div>
+
+            <button id="apply-grid" class="action-button action-button-wide">
+              Resize Grid
+            </button>
+
+            <div class="preset-row" aria-label="Square grid presets">
+              <button class="pill-button" data-preset-size="16">16 x 16</button>
+              <button class="pill-button" data-preset-size="24">24 x 24</button>
+              <button class="pill-button" data-preset-size="32">32 x 32</button>
+              <button class="pill-button" data-preset-size="48">48 x 48</button>
+            </div>
+
+            <label class="field">
+              <span>Preview Zoom</span>
+              <div class="range-row">
+                <input
+                  id="zoom-level"
+                  type="range"
+                  min="8"
+                  max="36"
+                  value="22"
+                />
+                <output id="zoom-value" for="zoom-level">22 px</output>
+              </div>
+            </label>
+
+            <p class="helper-text">
+              Resizing keeps whatever still fits in the top-left of the new
+              grid.
+            </p>
+          </section>
+
+          <section class="panel-card">
+            <div class="panel-heading">
+              <div>
+                <p class="panel-kicker">Tools</p>
+                <h2>Paint Controls</h2>
+              </div>
+            </div>
+
+            <div class="tool-grid" id="tool-buttons" role="group" aria-label="Drawing tools">
+              <button class="tool-button is-active" data-tool="brush">Brush</button>
+              <button class="tool-button" data-tool="eraser">Eraser</button>
+              <button class="tool-button" data-tool="eyedropper">Eyedropper</button>
+              <button class="tool-button" data-tool="select">Select</button>
+            </div>
+
+            <div class="tool-grid" role="group" aria-label="History controls">
+              <button id="undo-button" class="tool-button">Undo</button>
+              <button id="redo-button" class="tool-button">Redo</button>
+            </div>
+
+            <p class="helper-text">
+              Left click and drag paints. Right click erases instantly. Select
+              lets you box a region and drag it somewhere else. Press Escape to
+              clear a selection.
+            </p>
+          </section>
+
+          <section class="panel-card">
+            <div class="panel-heading">
+              <div>
+                <p class="panel-kicker">Color</p>
+                <h2>Picker & Palette</h2>
+              </div>
+            </div>
+
+            <div class="selected-color-card">
+              <div>
+                <p class="mini-label">Current</p>
+                <strong id="selected-color-label">#ff6f91</strong>
+              </div>
+              <div id="selected-color-chip" class="selected-color-chip"></div>
+            </div>
+
+            <label class="field">
+              <span>Color Wheel</span>
+              <input id="color-picker" type="color" value="#ff6f91" />
+            </label>
+
+            <label class="field">
+              <span>Hex Code</span>
+              <div class="inline-row">
+                <input
+                  id="hex-input"
+                  type="text"
+                  value="#ff6f91"
+                  spellcheck="false"
+                  placeholder="#ff6f91"
+                  maxlength="7"
+                />
+                <button id="apply-hex" class="pill-button pill-button-strong">
+                  Use
+                </button>
+              </div>
+            </label>
+
+            <div class="inline-row">
+              <button id="add-palette" class="pill-button pill-button-strong">
+                Save Color
+              </button>
+              <button id="use-transparent" class="pill-button">Transparent</button>
+            </div>
+
+            <div id="palette-swatches" class="palette-swatches" aria-label="Saved palette"></div>
+
+            <p class="helper-text">
+              Click a swatch to reuse it. Double click a saved swatch to remove
+              it.
+            </p>
+          </section>
+
+          <section class="panel-card">
+            <div class="panel-heading">
+              <div>
+                <p class="panel-kicker">Export</p>
+                <h2>Save Your Art</h2>
+              </div>
+            </div>
+
+            <label class="field">
+              <span>File Name</span>
+              <input id="file-name" type="text" value="tiny-tile-art" />
+            </label>
+
+            <div class="field-grid">
+              <label class="field">
+                <span>Export Scale</span>
+                <select id="export-scale">
+                  <option value="1">1x</option>
+                  <option value="4" selected>4x</option>
+                  <option value="8">8x</option>
+                  <option value="12">12x</option>
+                  <option value="16">16x</option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span>Background</span>
+                <select id="background-mode">
+                  <option value="transparent">Transparent</option>
+                  <option value="white">White</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </label>
+            </div>
+
+            <label id="background-color-field" class="field is-hidden">
+              <span>Custom Background</span>
+              <input id="background-color" type="color" value="#fff4e6" />
+            </label>
+
+            <div class="export-grid">
+              <button class="action-button" data-export-type="png">PNG</button>
+              <button class="action-button" data-export-type="webp">WebP</button>
+              <button class="action-button" data-export-type="jpeg">JPEG</button>
+              <button class="action-button" data-export-type="svg">SVG</button>
+              <button class="action-button" data-export-type="json">Project</button>
+              <button id="import-project-button" class="action-button action-button-muted">
+                Load Project
+              </button>
+            </div>
+
+            <input
+              id="import-project-input"
+              type="file"
+              accept="application/json"
+              hidden
+            />
+
+            <p class="helper-text">
+              Transparency stays intact in PNG, WebP, SVG, and project files.
+            </p>
+          </section>
+        </aside>
+
+        <section class="editor-panel panel-card">
+          <div class="editor-topbar">
+            <div class="status-chip-row">
+              <span id="grid-status" class="status-chip">16 x 16</span>
+              <span id="tool-status" class="status-chip">Brush</span>
+              <span id="pointer-status" class="status-chip">Cell --</span>
+            </div>
+            <p id="status-message" class="status-message">
+              Ready to paint.
+            </p>
+          </div>
+
+          <div class="canvas-wrap">
+            <canvas
+              id="pixel-canvas"
+              width="352"
+              height="352"
+              aria-label="Pixel art canvas"
+            ></canvas>
+          </div>
+
+          <div class="editor-footer">
+            <p>
+              Empty cells stay transparent. Use the eyedropper to pull a color
+              from the grid, or the eraser to punch holes back through it.
+            </p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
