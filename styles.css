@@ -95,14 +95,6 @@ button {
   line-height: 0.95;
 }
 
-.hero-text {
-  margin: 14px 0 0;
-  max-width: 56ch;
-  font-size: 1.02rem;
-  line-height: 1.6;
-  color: #355565;
-}
-
 .hero-actions {
   display: flex;
   flex-direction: column;
