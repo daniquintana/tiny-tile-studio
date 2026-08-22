@@ -3,6 +3,7 @@ const MAX_GRID_SIZE = 512;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 36;
 const MAX_PREVIEW_SIZE = 1000;
+const MAX_INTERACTIVE_PREVIEW_SIZE = 4096;
 const HISTORY_LIMIT = 80;
 const DEFAULT_PALETTE = [
   "#ff6f91",
@@ -91,6 +92,16 @@ function getSafeZoom(width, height, requestedZoom) {
   return clamp(requestedZoom, MIN_ZOOM, Math.min(MAX_ZOOM, maxSafeZoom));
 }
 
+function getMaxInteractiveZoom(width, height) {
+  const maxDimension = Math.max(width, height, 1);
+
+  return clamp(
+    Math.floor(MAX_INTERACTIVE_PREVIEW_SIZE / maxDimension),
+    MIN_ZOOM,
+    MAX_ZOOM,
+  );
+}
+
 function sanitizeFileName(value) {
   const cleaned = value.trim().replace(/[^a-z0-9-_]+/gi, "-");
   return cleaned || "tiny-tile-art";
@@ -153,6 +164,9 @@ function syncInputsFromState() {
   elements.gridWidth.value = String(state.width);
   elements.gridHeight.value = String(state.height);
   elements.zoomLevel.value = String(state.zoom);
+  elements.zoomLevel.max = String(
+    getMaxInteractiveZoom(state.width, state.height),
+  );
   elements.zoomValue.textContent = `${state.zoom} px`;
   elements.colorPicker.value = state.selectedColor;
   elements.hexInput.value = state.selectedColor;
@@ -1319,10 +1333,10 @@ function bindEvents() {
   });
 
   elements.zoomLevel.addEventListener("input", () => {
-    state.zoom = getSafeZoom(
-      state.width,
-      state.height,
+    state.zoom = clamp(
       Number(elements.zoomLevel.value) || 22,
+      MIN_ZOOM,
+      getMaxInteractiveZoom(state.width, state.height),
     );
     persistState();
     renderAll();
