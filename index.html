@@ -223,19 +223,20 @@
               <button class="action-button" data-export-type="svg">SVG</button>
               <button class="action-button" data-export-type="json">Project</button>
               <button id="import-project-button" class="action-button action-button-muted">
-                Load Project
+                Load PNG / Project
               </button>
             </div>
 
             <input
               id="import-project-input"
               type="file"
-              accept="application/json"
+              accept=".png,.json,image/png,application/json"
               hidden
             />
 
             <p class="helper-text">
               Transparency stays intact in PNG, WebP, SVG, and project files.
+              You can load a PNG as a new pixel grid or reopen a project JSON.
             </p>
           </section>
         </aside>

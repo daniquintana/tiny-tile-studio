@@ -998,6 +998,114 @@ function exportProject() {
   setStatus("Project exported.");
 }
 
+function loadImageFile(file) {
+  return new Promise((resolve, reject) => {
+    const imageUrl = URL.createObjectURL(file);
+    const image = new Image();
+
+    image.addEventListener(
+      "load",
+      () => {
+        URL.revokeObjectURL(imageUrl);
+        resolve(image);
+      },
+      { once: true },
+    );
+    image.addEventListener(
+      "error",
+      () => {
+        URL.revokeObjectURL(imageUrl);
+        reject(new Error("Unable to decode PNG image."));
+      },
+      { once: true },
+    );
+    image.src = imageUrl;
+  });
+}
+
+function rgbToHex(red, green, blue) {
+  return `#${[red, green, blue]
+    .map((channel) => channel.toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
+async function importPng(file) {
+  try {
+    const image = await loadImageFile(file);
+    const width = image.naturalWidth;
+    const height = image.naturalHeight;
+
+    if (width < 1 || height < 1) {
+      setStatus("That PNG does not contain a valid image.");
+      return;
+    }
+
+    if (width > MAX_GRID_SIZE || height > MAX_GRID_SIZE) {
+      setStatus(
+        `That PNG is ${width} x ${height}. Images must be ${MAX_GRID_SIZE} x ${MAX_GRID_SIZE} or smaller.`,
+      );
+      return;
+    }
+
+    const importCanvas = document.createElement("canvas");
+    importCanvas.width = width;
+    importCanvas.height = height;
+    const importContext = importCanvas.getContext("2d", {
+      willReadFrequently: true,
+    });
+
+    if (!importContext) {
+      throw new Error("Unable to create an image import canvas.");
+    }
+
+    importContext.drawImage(image, 0, 0);
+    const pixelData = importContext.getImageData(0, 0, width, height).data;
+    const nextCells = createEmptyCells(width, height);
+    let semiTransparentPixels = 0;
+
+    for (let index = 0; index < nextCells.length; index += 1) {
+      const offset = index * 4;
+      const alpha = pixelData[offset + 3];
+
+      if (alpha === 0) {
+        continue;
+      }
+
+      if (alpha < 255) {
+        semiTransparentPixels += 1;
+      }
+
+      nextCells[index] = rgbToHex(
+        pixelData[offset],
+        pixelData[offset + 1],
+        pixelData[offset + 2],
+      );
+    }
+
+    commitHistorySnapshot();
+    state.width = width;
+    state.height = height;
+    state.cells = nextCells;
+    state.fileName = sanitizeFileName(file.name.replace(/\.png$/i, ""));
+    state.hoverCell = null;
+    clearSelection();
+    persistState();
+    renderAll();
+
+    if (semiTransparentPixels > 0) {
+      setStatus(
+        `Loaded ${file.name} as a ${width} x ${height} grid. Semi-transparent pixels were imported as solid colors.`,
+      );
+      return;
+    }
+
+    setStatus(`Loaded ${file.name} as a ${width} x ${height} grid.`);
+  } catch (error) {
+    console.error(error);
+    setStatus("That PNG could not be loaded by Tiny Tile Studio.");
+  }
+}
+
 function importProject(file) {
   if (!file) {
     return;
@@ -1037,11 +1145,31 @@ function importProject(file) {
       setStatus(`Loaded ${file.name}.`);
     } catch (error) {
       console.error(error);
-      setStatus("That file could not be loaded as a Pixel Petal project.");
+      setStatus("That file could not be loaded as a Tiny Tile Studio project.");
     }
   });
 
   reader.readAsText(file);
+}
+
+function importFile(file) {
+  if (!file) {
+    return;
+  }
+
+  const lowerName = file.name.toLowerCase();
+
+  if (file.type === "image/png" || lowerName.endsWith(".png")) {
+    importPng(file);
+    return;
+  }
+
+  if (file.type === "application/json" || lowerName.endsWith(".json")) {
+    importProject(file);
+    return;
+  }
+
+  setStatus("Choose a PNG image or a Tiny Tile Studio project JSON file.");
 }
 
 function clearGrid() {
@@ -1204,7 +1332,7 @@ function bindEvents() {
   });
 
   elements.importProjectInput.addEventListener("change", (event) => {
-    importProject(event.target.files?.[0]);
+    importFile(event.target.files?.[0]);
     event.target.value = "";
   });
 
