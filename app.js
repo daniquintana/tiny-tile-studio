@@ -1,8 +1,8 @@
 const STORAGE_KEY = "tiny-tile-studio-state-v1";
 const MAX_GRID_SIZE = 512;
-const MIN_ZOOM = 4;
+const MIN_ZOOM = 1;
 const MAX_ZOOM = 36;
-const MAX_PREVIEW_SIZE = 2048;
+const MAX_PREVIEW_SIZE = 1000;
 const HISTORY_LIMIT = 80;
 const DEFAULT_PALETTE = [
   "#ff6f91",
@@ -262,7 +262,7 @@ function renderCanvas() {
     drawSelectionCells(ctx, state.selectionDrag, state.selectionDrag.targetX, state.selectionDrag.targetY, 0.9);
   }
 
-  if (state.showGrid) {
+  if (state.showGrid && state.zoom >= 3) {
     ctx.strokeStyle = "rgba(23, 50, 68, 0.18)";
     ctx.lineWidth = 1;
 
@@ -299,7 +299,7 @@ function renderCanvas() {
     drawSelectionFrame(state.selection, true);
   }
 
-  if (state.hoverCell !== null) {
+  if (state.hoverCell !== null && state.zoom >= 3) {
     const { x, y } = getCoordinates(state.hoverCell);
     ctx.strokeStyle = "rgba(255, 122, 89, 0.9)";
     ctx.lineWidth = Math.max(2, Math.floor(state.zoom / 10));
@@ -530,10 +530,20 @@ function drawSelectionFrame(rect, isCommittedSelection) {
   ctx.strokeStyle = isCommittedSelection
     ? "rgba(24, 87, 80, 0.96)"
     : "rgba(239, 91, 57, 0.96)";
-  ctx.strokeRect(x + 1, y + 1, width - 2, height - 2);
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x + 3, y + 3, width - 6, height - 6);
+  const outerInset = Math.min(1, width / 4, height / 4);
+  ctx.strokeRect(
+    x + outerInset,
+    y + outerInset,
+    Math.max(0, width - outerInset * 2),
+    Math.max(0, height - outerInset * 2),
+  );
+
+  if (width > 6 && height > 6) {
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 3, y + 3, width - 6, height - 6);
+  }
+
   ctx.restore();
 }
 
@@ -1106,15 +1116,18 @@ async function importPng(file) {
     clearSelection();
     persistState();
     renderAll();
+    const zoomMessage = ` Preview zoom set to ${state.zoom} px per tile.`;
 
     if (semiTransparentPixels > 0) {
       setStatus(
-        `Loaded ${file.name} as a ${width} x ${height} grid. Semi-transparent pixels were imported as solid colors.`,
+        `Loaded ${file.name} as a ${width} x ${height} grid.${zoomMessage} Semi-transparent pixels were imported as solid colors.`,
       );
       return;
     }
 
-    setStatus(`Loaded ${file.name} as a ${width} x ${height} grid.`);
+    setStatus(
+      `Loaded ${file.name} as a ${width} x ${height} grid.${zoomMessage}`,
+    );
   } catch (error) {
     console.error(error);
     setStatus("That PNG could not be loaded by Tiny Tile Studio.");
