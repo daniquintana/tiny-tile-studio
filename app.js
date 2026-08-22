@@ -1,5 +1,8 @@
 const STORAGE_KEY = "tiny-tile-studio-state-v1";
-const MAX_GRID_SIZE = 128;
+const MAX_GRID_SIZE = 512;
+const MIN_ZOOM = 4;
+const MAX_ZOOM = 36;
+const MAX_PREVIEW_SIZE = 2048;
 const HISTORY_LIMIT = 80;
 const DEFAULT_PALETTE = [
   "#ff6f91",
@@ -76,6 +79,16 @@ const state = {
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+function getSafeZoom(width, height, requestedZoom) {
+  const maxDimension = Math.max(width, height, 1);
+  const maxSafeZoom = Math.max(
+    MIN_ZOOM,
+    Math.floor(MAX_PREVIEW_SIZE / maxDimension),
+  );
+
+  return clamp(requestedZoom, MIN_ZOOM, Math.min(MAX_ZOOM, maxSafeZoom));
 }
 
 function sanitizeFileName(value) {
@@ -399,7 +412,7 @@ function restoreState() {
 
     state.width = width;
     state.height = height;
-    state.zoom = clamp(Number(parsed.zoom) || 22, 8, 36);
+    state.zoom = getSafeZoom(width, height, Number(parsed.zoom) || 22);
     state.showGrid = parsed.showGrid !== false;
     state.tool = ["brush", "eraser", "eyedropper", "select"].includes(parsed.tool)
       ? parsed.tool
@@ -560,6 +573,7 @@ function applyGridResize(width, height) {
 
   state.width = nextWidth;
   state.height = nextHeight;
+  state.zoom = getSafeZoom(nextWidth, nextHeight, state.zoom);
   state.cells = nextCells;
   state.hoverCell = null;
   clearSelection();
@@ -1085,6 +1099,7 @@ async function importPng(file) {
     commitHistorySnapshot();
     state.width = width;
     state.height = height;
+    state.zoom = getSafeZoom(width, height, state.zoom);
     state.cells = nextCells;
     state.fileName = sanitizeFileName(file.name.replace(/\.png$/i, ""));
     state.hoverCell = null;
@@ -1126,7 +1141,11 @@ function importProject(file) {
 
       state.width = width;
       state.height = height;
-      state.zoom = clamp(Number(parsed.zoom) || state.zoom, 8, 36);
+      state.zoom = getSafeZoom(
+        width,
+        height,
+        Number(parsed.zoom) || state.zoom,
+      );
       state.showGrid = parsed.showGrid !== false;
       state.selectedColor = normalizeHex(parsed.selectedColor || "") || state.selectedColor;
       state.palette = Array.isArray(parsed.palette)
@@ -1287,7 +1306,11 @@ function bindEvents() {
   });
 
   elements.zoomLevel.addEventListener("input", () => {
-    state.zoom = clamp(Number(elements.zoomLevel.value) || 22, 8, 36);
+    state.zoom = getSafeZoom(
+      state.width,
+      state.height,
+      Number(elements.zoomLevel.value) || 22,
+    );
     persistState();
     renderAll();
   });
