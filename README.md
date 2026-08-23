@@ -2,7 +2,7 @@
 
 Tiny Tile Studio is a standalone browser-based pixel editor that works from local files. Open `index.html` in your browser and you can:
 
-- Pick any grid size up to 512 x 512
+- Use grids up to 4,096 px per side and 1.5 million total tiles
 - Paint full tiles by clicking or dragging
 - Use a color wheel, type hex codes, and save favorite swatches
 - Switch to an eyedropper or eraser for transparent cells
@@ -19,7 +19,7 @@ Tiny Tile Studio is a standalone browser-based pixel editor that works from loca
 ## Export notes
 
 - `PNG`, `WebP`, and `SVG` can preserve transparent empty cells.
-- Imported PNGs use one image pixel per grid tile and must be no larger than 512 x 512.
+- Imported PNGs use one image pixel per grid tile and may contain up to 1.5 million tiles, with a maximum of 4,096 px on either side.
 - Large grids automatically use a preview zoom as low as 1 px per tile to keep the editor responsive.
 - You can zoom back in and scroll around the canvas for precise painting and selection.
 - Semi-transparent imported pixels become solid colors because grid cells are either solid or transparent.

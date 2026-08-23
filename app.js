@@ -1,5 +1,6 @@
 const STORAGE_KEY = "tiny-tile-studio-state-v1";
-const MAX_GRID_SIZE = 512;
+const MAX_GRID_SIZE = 4096;
+const MAX_GRID_CELLS = 1_500_000;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 36;
 const MAX_PREVIEW_SIZE = 1000;
@@ -83,6 +84,20 @@ const state = {
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+function isGridSizeAllowed(width, height) {
+  return (
+    width <= MAX_GRID_SIZE
+    && height <= MAX_GRID_SIZE
+    && width * height <= MAX_GRID_CELLS
+  );
+}
+
+function gridLimitMessage(width, height, subject = "grid") {
+  return `That ${subject} is ${width} x ${height} (${(
+    width * height
+  ).toLocaleString()} tiles). The limit is ${MAX_GRID_SIZE.toLocaleString()} px per side and ${MAX_GRID_CELLS.toLocaleString()} total tiles.`;
 }
 
 function getSafeZoom(width, height, requestedZoom) {
@@ -465,6 +480,11 @@ function restoreState() {
     const parsed = JSON.parse(saved);
     const width = clamp(Number(parsed.width) || 16, 1, MAX_GRID_SIZE);
     const height = clamp(Number(parsed.height) || 16, 1, MAX_GRID_SIZE);
+
+    if (!isGridSizeAllowed(width, height)) {
+      throw new Error(gridLimitMessage(width, height));
+    }
+
     const cells = Array.isArray(parsed.cells) ? parsed.cells.slice(0, width * height) : [];
 
     state.width = width;
@@ -664,6 +684,13 @@ function snapSelectionTarget(targetX, targetY, selection) {
 function applyGridResize(width, height) {
   const nextWidth = clamp(width, 1, MAX_GRID_SIZE);
   const nextHeight = clamp(height, 1, MAX_GRID_SIZE);
+
+  if (!isGridSizeAllowed(nextWidth, nextHeight)) {
+    syncInputsFromState();
+    setStatus(gridLimitMessage(nextWidth, nextHeight));
+    return;
+  }
+
   const nextCells = createEmptyCells(nextWidth, nextHeight);
 
   for (let y = 0; y < Math.min(state.height, nextHeight); y += 1) {
@@ -1158,10 +1185,8 @@ async function importPng(file) {
       return;
     }
 
-    if (width > MAX_GRID_SIZE || height > MAX_GRID_SIZE) {
-      setStatus(
-        `That PNG is ${width} x ${height}. Images must be ${MAX_GRID_SIZE} x ${MAX_GRID_SIZE} or smaller.`,
-      );
+    if (!isGridSizeAllowed(width, height)) {
+      setStatus(gridLimitMessage(width, height, "PNG"));
       return;
     }
 
@@ -1243,6 +1268,12 @@ function importProject(file) {
       const parsed = JSON.parse(String(reader.result));
       const width = clamp(Number(parsed.width) || 16, 1, MAX_GRID_SIZE);
       const height = clamp(Number(parsed.height) || 16, 1, MAX_GRID_SIZE);
+
+      if (!isGridSizeAllowed(width, height)) {
+        setStatus(gridLimitMessage(width, height, "project"));
+        return;
+      }
+
       const nextCells = createEmptyCells(width, height);
 
       nextCells.forEach((_, index) => {
