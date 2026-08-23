@@ -6,6 +6,7 @@ Tiny Tile Studio is a standalone browser-based pixel editor that works from loca
 - Paint full tiles by clicking or dragging
 - Use a color wheel, type hex codes, and save favorite swatches
 - Switch to an eyedropper or eraser for transparent cells
+- Snap selections and moved artwork to configurable 2, 4, 8, 16, or 32 px tile grids
 - Load a PNG directly as a pixel grid, including fully transparent cells
 - Export PNG, WebP, JPEG, SVG, or a reusable JSON project file
 

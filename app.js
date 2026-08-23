@@ -5,6 +5,7 @@ const MAX_ZOOM = 36;
 const MAX_PREVIEW_SIZE = 1000;
 const MAX_INTERACTIVE_PREVIEW_SIZE = 4096;
 const HISTORY_LIMIT = 80;
+const SNAP_SIZES = [1, 2, 4, 8, 16, 32];
 const DEFAULT_PALETTE = [
   "#ff6f91",
   "#ff9671",
@@ -30,6 +31,7 @@ const elements = {
   toolButtons: [...document.querySelectorAll("[data-tool]")],
   undoButton: document.querySelector("#undo-button"),
   redoButton: document.querySelector("#redo-button"),
+  snapSize: document.querySelector("#snap-size"),
   colorPicker: document.querySelector("#color-picker"),
   hexInput: document.querySelector("#hex-input"),
   applyHex: document.querySelector("#apply-hex"),
@@ -63,6 +65,7 @@ const state = {
   height: 16,
   zoom: 22,
   showGrid: true,
+  snapSize: 1,
   tool: "brush",
   selectedColor: "#ff6f91",
   palette: [...DEFAULT_PALETTE],
@@ -100,6 +103,21 @@ function getMaxInteractiveZoom(width, height) {
     MIN_ZOOM,
     MAX_ZOOM,
   );
+}
+
+function normalizeSnapSize(value) {
+  const snapSize = Number(value);
+  return SNAP_SIZES.includes(snapSize) ? snapSize : 1;
+}
+
+function inferPngSnapSize(width, height) {
+  if (Math.max(width, height) < 128) {
+    return 1;
+  }
+
+  return [16, 8, 4, 2].find(
+    (snapSize) => width % snapSize === 0 && height % snapSize === 0,
+  ) || 1;
 }
 
 function sanitizeFileName(value) {
@@ -168,6 +186,7 @@ function syncInputsFromState() {
     getMaxInteractiveZoom(state.width, state.height),
   );
   elements.zoomValue.textContent = `${state.zoom} px`;
+  elements.snapSize.value = String(state.snapSize);
   elements.colorPicker.value = state.selectedColor;
   elements.hexInput.value = state.selectedColor;
   elements.fileName.value = state.fileName;
@@ -276,24 +295,47 @@ function renderCanvas() {
     drawSelectionCells(ctx, state.selectionDrag, state.selectionDrag.targetX, state.selectionDrag.targetY, 0.9);
   }
 
-  if (state.showGrid && state.zoom >= 3) {
-    ctx.strokeStyle = "rgba(23, 50, 68, 0.18)";
-    ctx.lineWidth = 1;
+  if (state.showGrid) {
+    if (state.zoom >= 3) {
+      ctx.strokeStyle = "rgba(23, 50, 68, 0.18)";
+      ctx.lineWidth = 1;
 
-    for (let x = 0; x <= state.width; x += 1) {
-      const position = x * state.zoom + 0.5;
-      ctx.beginPath();
-      ctx.moveTo(position, 0);
-      ctx.lineTo(position, elements.canvas.height);
-      ctx.stroke();
+      for (let x = 0; x <= state.width; x += 1) {
+        const position = x * state.zoom + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(position, 0);
+        ctx.lineTo(position, elements.canvas.height);
+        ctx.stroke();
+      }
+
+      for (let y = 0; y <= state.height; y += 1) {
+        const position = y * state.zoom + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(0, position);
+        ctx.lineTo(elements.canvas.width, position);
+        ctx.stroke();
+      }
     }
 
-    for (let y = 0; y <= state.height; y += 1) {
-      const position = y * state.zoom + 0.5;
-      ctx.beginPath();
-      ctx.moveTo(0, position);
-      ctx.lineTo(elements.canvas.width, position);
-      ctx.stroke();
+    if (state.snapSize > 1) {
+      ctx.strokeStyle = "rgba(12, 56, 76, 0.62)";
+      ctx.lineWidth = Math.max(1, Math.min(3, state.zoom / 4));
+
+      for (let x = 0; x <= state.width; x += state.snapSize) {
+        const position = x * state.zoom + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(position, 0);
+        ctx.lineTo(position, elements.canvas.height);
+        ctx.stroke();
+      }
+
+      for (let y = 0; y <= state.height; y += state.snapSize) {
+        const position = y * state.zoom + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(0, position);
+        ctx.lineTo(elements.canvas.width, position);
+        ctx.stroke();
+      }
     }
   }
 
@@ -390,6 +432,7 @@ function persistState() {
     height: state.height,
     zoom: state.zoom,
     showGrid: state.showGrid,
+    snapSize: state.snapSize,
     tool: state.tool,
     selectedColor: state.selectedColor,
     palette: state.palette,
@@ -428,6 +471,7 @@ function restoreState() {
     state.height = height;
     state.zoom = getSafeZoom(width, height, Number(parsed.zoom) || 22);
     state.showGrid = parsed.showGrid !== false;
+    state.snapSize = normalizeSnapSize(parsed.snapSize);
     state.tool = ["brush", "eraser", "eyedropper", "select"].includes(parsed.tool)
       ? parsed.tool
       : "brush";
@@ -464,11 +508,33 @@ function clearSelection() {
 }
 
 function getSelectionBounds(draft) {
-  return {
+  const bounds = {
     x: Math.min(draft.startX, draft.endX),
     y: Math.min(draft.startY, draft.endY),
     width: Math.abs(draft.endX - draft.startX) + 1,
     height: Math.abs(draft.endY - draft.startY) + 1,
+  };
+
+  if (state.snapSize === 1) {
+    return bounds;
+  }
+
+  const x = Math.floor(bounds.x / state.snapSize) * state.snapSize;
+  const y = Math.floor(bounds.y / state.snapSize) * state.snapSize;
+  const right = Math.min(
+    state.width,
+    Math.ceil((bounds.x + bounds.width) / state.snapSize) * state.snapSize,
+  );
+  const bottom = Math.min(
+    state.height,
+    Math.ceil((bounds.y + bounds.height) / state.snapSize) * state.snapSize,
+  );
+
+  return {
+    x,
+    y,
+    width: right - x,
+    height: bottom - y,
   };
 }
 
@@ -582,6 +648,17 @@ function clampSelectionTarget(targetX, targetY, selection) {
     x: clamp(targetX, 0, state.width - selection.width),
     y: clamp(targetY, 0, state.height - selection.height),
   };
+}
+
+function snapSelectionTarget(targetX, targetY, selection) {
+  const snappedX = state.snapSize === 1
+    ? targetX
+    : Math.round(targetX / state.snapSize) * state.snapSize;
+  const snappedY = state.snapSize === 1
+    ? targetY
+    : Math.round(targetY / state.snapSize) * state.snapSize;
+
+  return clampSelectionTarget(snappedX, snappedY, selection);
 }
 
 function applyGridResize(width, height) {
@@ -748,7 +825,7 @@ function handleSelectionMove(cellIndex) {
     return;
   }
 
-  const nextTarget = clampSelectionTarget(
+  const nextTarget = snapSelectionTarget(
     x - state.selectionDrag.offsetX,
     y - state.selectionDrag.offsetY,
     state.selectionDrag,
@@ -804,7 +881,9 @@ function finishSelectionDraft() {
   state.selectionDraft = null;
   state.selection = buildSelection(bounds);
   renderAll();
-  setStatus(`Selected ${bounds.width} x ${bounds.height}. Drag inside it to move it.`);
+  setStatus(
+    `Selected ${bounds.width} x ${bounds.height} on the ${state.snapSize} px snap grid. Drag inside it to move it.`,
+  );
 }
 
 function handlePaintStart(event) {
@@ -1021,6 +1100,7 @@ function exportProject() {
     height: state.height,
     zoom: state.zoom,
     showGrid: state.showGrid,
+    snapSize: state.snapSize,
     selectedColor: state.selectedColor,
     palette: state.palette,
     fileName: state.fileName,
@@ -1124,6 +1204,7 @@ async function importPng(file) {
     state.width = width;
     state.height = height;
     state.zoom = getSafeZoom(width, height, state.zoom);
+    state.snapSize = inferPngSnapSize(width, height);
     state.cells = nextCells;
     state.fileName = sanitizeFileName(file.name.replace(/\.png$/i, ""));
     state.hoverCell = null;
@@ -1131,16 +1212,19 @@ async function importPng(file) {
     persistState();
     renderAll();
     const zoomMessage = ` Preview zoom set to ${state.zoom} px per tile.`;
+    const snapMessage = state.snapSize > 1
+      ? ` A ${state.snapSize} x ${state.snapSize} px snap grid was detected.`
+      : "";
 
     if (semiTransparentPixels > 0) {
       setStatus(
-        `Loaded ${file.name} as a ${width} x ${height} grid.${zoomMessage} Semi-transparent pixels were imported as solid colors.`,
+        `Loaded ${file.name} as a ${width} x ${height} grid.${zoomMessage}${snapMessage} Semi-transparent pixels were imported as solid colors.`,
       );
       return;
     }
 
     setStatus(
-      `Loaded ${file.name} as a ${width} x ${height} grid.${zoomMessage}`,
+      `Loaded ${file.name} as a ${width} x ${height} grid.${zoomMessage}${snapMessage}`,
     );
   } catch (error) {
     console.error(error);
@@ -1174,6 +1258,7 @@ function importProject(file) {
         Number(parsed.zoom) || state.zoom,
       );
       state.showGrid = parsed.showGrid !== false;
+      state.snapSize = normalizeSnapSize(parsed.snapSize);
       state.selectedColor = normalizeHex(parsed.selectedColor || "") || state.selectedColor;
       state.palette = Array.isArray(parsed.palette)
         ? [...DEFAULT_PALETTE, ...parsed.palette
@@ -1240,6 +1325,7 @@ function resetProject() {
   state.height = 16;
   state.zoom = 22;
   state.showGrid = true;
+  state.snapSize = 1;
   state.tool = "brush";
   state.selectedColor = "#ff6f91";
   state.palette = [...DEFAULT_PALETTE];
@@ -1350,6 +1436,18 @@ function bindEvents() {
 
   elements.undoButton.addEventListener("click", undo);
   elements.redoButton.addEventListener("click", redo);
+  elements.snapSize.addEventListener("change", () => {
+    state.snapSize = normalizeSnapSize(elements.snapSize.value);
+    state.showGrid = true;
+    clearSelection();
+    persistState();
+    renderAll();
+    setStatus(
+      state.snapSize === 1
+        ? "Selection snapping is off. Moves use individual pixels."
+        : `Selections and moves now snap to a ${state.snapSize} x ${state.snapSize} px grid.`,
+    );
+  });
 
   elements.colorPicker.addEventListener("input", () => {
     state.selectedColor = elements.colorPicker.value.toLowerCase();

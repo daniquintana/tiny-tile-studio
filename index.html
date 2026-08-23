@@ -111,10 +111,23 @@
               <button id="redo-button" class="tool-button">Redo</button>
             </div>
 
+            <label class="field">
+              <span>Selection Snap Grid</span>
+              <select id="snap-size">
+                <option value="1">Off (1 px)</option>
+                <option value="2">2 x 2 px</option>
+                <option value="4">4 x 4 px</option>
+                <option value="8">8 x 8 px</option>
+                <option value="16">16 x 16 px</option>
+                <option value="32">32 x 32 px</option>
+              </select>
+            </label>
+
             <p class="helper-text">
               Left click and drag paints. Right click erases instantly. Select
-              lets you box a region and drag it somewhere else. Press Escape to
-              clear a selection.
+              lets you box a region and drag it somewhere else. The snap grid
+              locks selections and placement to larger tile boundaries. Press
+              Escape to clear a selection.
             </p>
           </section>
 
