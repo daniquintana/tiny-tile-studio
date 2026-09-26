@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tiny Tile Studio</title>
-    <link rel="stylesheet" href="./styles.css?v=20260822c" />
-    <script src="./app.js?v=20260822c" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=20260925a" />
+    <script src="./app.js?v=20260925a" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -111,6 +111,25 @@
               <button id="redo-button" class="tool-button">Redo</button>
             </div>
 
+            <div class="tool-grid" role="group" aria-label="Selection clipboard controls">
+              <button
+                id="copy-selection-button"
+                class="tool-button"
+                aria-keyshortcuts="Control+C Meta+C"
+                disabled
+              >
+                Copy Selection
+              </button>
+              <button
+                id="paste-selection-button"
+                class="tool-button"
+                aria-keyshortcuts="Control+V Meta+V"
+                disabled
+              >
+                Paste Selection
+              </button>
+            </div>
+
             <label class="field">
               <span>Selection Snap Grid</span>
               <select id="snap-size">
@@ -126,7 +145,8 @@
             <p class="helper-text">
               Left click and drag paints. Right click erases instantly. Select
               lets you box a region and drag it somewhere else. The snap grid
-              locks selections and placement to larger tile boundaries. Press
+              locks selections and placement to larger tile boundaries. Copy
+              and paste with the buttons or Cmd/Ctrl+C and Cmd/Ctrl+V. Press
               Escape to clear a selection.
             </p>
           </section>

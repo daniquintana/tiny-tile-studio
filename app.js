@@ -32,6 +32,8 @@ const elements = {
   toolButtons: [...document.querySelectorAll("[data-tool]")],
   undoButton: document.querySelector("#undo-button"),
   redoButton: document.querySelector("#redo-button"),
+  copySelectionButton: document.querySelector("#copy-selection-button"),
+  pasteSelectionButton: document.querySelector("#paste-selection-button"),
   snapSize: document.querySelector("#snap-size"),
   colorPicker: document.querySelector("#color-picker"),
   hexInput: document.querySelector("#hex-input"),
@@ -79,6 +81,7 @@ const state = {
   selection: null,
   selectionDraft: null,
   selectionDrag: null,
+  selectionClipboard: null,
   fileName: "tiny-tile-art",
 };
 
@@ -439,6 +442,8 @@ function renderAll() {
   renderCanvas();
   elements.undoButton.disabled = state.history.length === 0;
   elements.redoButton.disabled = state.future.length === 0;
+  elements.copySelectionButton.disabled = !state.selection;
+  elements.pasteSelectionButton.disabled = !state.selectionClipboard;
 }
 
 function persistState() {
@@ -679,6 +684,82 @@ function snapSelectionTarget(targetX, targetY, selection) {
     : Math.round(targetY / state.snapSize) * state.snapSize;
 
   return clampSelectionTarget(snappedX, snappedY, selection);
+}
+
+function copySelection() {
+  if (!state.selection || state.selectionDraft || state.selectionDrag) {
+    setStatus("Select a finished region before copying.");
+    return;
+  }
+
+  state.selectionClipboard = {
+    width: state.selection.width,
+    height: state.selection.height,
+    cells: state.selection.cells.slice(),
+    sourceX: state.selection.x,
+    sourceY: state.selection.y,
+    pasteCount: 0,
+  };
+  renderAll();
+  setStatus(`Copied ${state.selection.width} x ${state.selection.height}. Paste it, then drag the copy into place.`);
+}
+
+function getPasteTarget(clipboard) {
+  clipboard.pasteCount += 1;
+  const step = Math.max(1, state.snapSize);
+  const offset = step * clipboard.pasteCount;
+  const forward = clampSelectionTarget(
+    clipboard.sourceX + offset,
+    clipboard.sourceY + offset,
+    clipboard,
+  );
+
+  if (forward.x !== clipboard.sourceX || forward.y !== clipboard.sourceY) {
+    return forward;
+  }
+
+  return clampSelectionTarget(
+    clipboard.sourceX - offset,
+    clipboard.sourceY - offset,
+    clipboard,
+  );
+}
+
+function pasteSelection() {
+  const clipboard = state.selectionClipboard;
+
+  if (!clipboard) {
+    setStatus("Copy a selection before pasting.");
+    return;
+  }
+
+  if (clipboard.width > state.width || clipboard.height > state.height) {
+    setStatus(`The copied ${clipboard.width} x ${clipboard.height} block does not fit on this canvas.`);
+    return;
+  }
+
+  if (state.selectionDrag?.committed) {
+    finishSelectionDrag();
+  }
+
+  state.selectionDraft = null;
+  state.selectionDrag = null;
+  const target = getPasteTarget(clipboard);
+  const pastedSelection = {
+    x: target.x,
+    y: target.y,
+    width: clipboard.width,
+    height: clipboard.height,
+    cells: clipboard.cells.slice(),
+  };
+
+  commitHistorySnapshot();
+  stampSelection(pastedSelection, target.x, target.y);
+  state.selection = pastedSelection;
+  state.tool = "select";
+  persistState();
+  renderAll();
+  setStatus(`Pasted ${clipboard.width} x ${clipboard.height} at ${target.x + 1}, ${target.y + 1}. Drag the selected copy to reposition it.`);
 }
 
 function applyGridResize(width, height) {
@@ -1467,6 +1548,8 @@ function bindEvents() {
 
   elements.undoButton.addEventListener("click", undo);
   elements.redoButton.addEventListener("click", redo);
+  elements.copySelectionButton.addEventListener("click", copySelection);
+  elements.pasteSelectionButton.addEventListener("click", pasteSelection);
   elements.snapSize.addEventListener("change", () => {
     state.snapSize = normalizeSnapSize(elements.snapSize.value);
     state.showGrid = true;
@@ -1563,6 +1646,26 @@ function bindEvents() {
     if (metaOrCtrl && event.key.toLowerCase() === "z") {
       event.preventDefault();
       undo();
+      return;
+    }
+
+    if (metaOrCtrl && event.key.toLowerCase() === "c") {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) {
+        return;
+      }
+
+      event.preventDefault();
+      copySelection();
+      return;
+    }
+
+    if (metaOrCtrl && event.key.toLowerCase() === "v") {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) {
+        return;
+      }
+
+      event.preventDefault();
+      pasteSelection();
       return;
     }
 
