@@ -243,6 +243,10 @@ function getCanvasCursor() {
   }
 
   if (state.tool === "select") {
+    if (state.selection?.floating) {
+      return "copy";
+    }
+
     if (state.hoverCell !== null && state.selection) {
       const { x, y } = getCoordinates(state.hoverCell);
 
@@ -309,8 +313,10 @@ function renderCanvas() {
     ctx.fillRect(x * state.zoom, y * state.zoom, state.zoom, state.zoom);
   }
 
-  if (state.selectionDrag?.committed) {
+  if (state.selectionDrag && (state.selectionDrag.committed || state.selectionDrag.floating)) {
     drawSelectionCells(ctx, state.selectionDrag, state.selectionDrag.targetX, state.selectionDrag.targetY, 0.9);
+  } else if (state.selection?.floating) {
+    drawSelectionCells(ctx, state.selection, state.selection.x, state.selection.y, 0.9);
   }
 
   if (state.showGrid) {
@@ -370,7 +376,7 @@ function renderCanvas() {
       true,
     );
   } else if (state.selection) {
-    drawSelectionFrame(state.selection, true);
+    drawSelectionFrame(state.selection, !state.selection.floating);
   }
 
   if (state.hoverCell !== null && state.zoom >= 3) {
@@ -744,22 +750,26 @@ function pasteSelection() {
 
   state.selectionDraft = null;
   state.selectionDrag = null;
-  const target = getPasteTarget(clipboard);
+  const hoverCoordinates = state.hoverCell === null
+    ? null
+    : getCoordinates(state.hoverCell);
+  const target = hoverCoordinates
+    ? snapSelectionTarget(hoverCoordinates.x, hoverCoordinates.y, clipboard)
+    : getPasteTarget(clipboard);
   const pastedSelection = {
     x: target.x,
     y: target.y,
     width: clipboard.width,
     height: clipboard.height,
     cells: clipboard.cells.slice(),
+    floating: true,
   };
 
-  commitHistorySnapshot();
-  stampSelection(pastedSelection, target.x, target.y);
   state.selection = pastedSelection;
   state.tool = "select";
   persistState();
   renderAll();
-  setStatus(`Pasted ${clipboard.width} x ${clipboard.height} at ${target.x + 1}, ${target.y + 1}. Drag the selected copy to reposition it.`);
+  setStatus(`Pasted a floating ${clipboard.width} x ${clipboard.height} copy. Move the outlined preview over the canvas and click to place it.`);
 }
 
 function applyGridResize(width, height) {
@@ -896,6 +906,7 @@ function handleSelectionStart(event, cellIndex) {
       offsetX: x - state.selection.x,
       offsetY: y - state.selection.y,
       committed: false,
+      floating: state.selection.floating === true,
     };
     renderCanvas();
     setStatus("Drag to move the selected block.");
@@ -946,8 +957,11 @@ function handleSelectionMove(cellIndex) {
       || nextTarget.y !== state.selectionDrag.originY
     )
   ) {
-    commitHistorySnapshot();
-    clearSelectionArea(state.selection);
+    if (!state.selectionDrag.floating) {
+      commitHistorySnapshot();
+      clearSelectionArea(state.selection);
+    }
+
     state.selectionDrag.committed = true;
   }
 
@@ -957,31 +971,69 @@ function handleSelectionMove(cellIndex) {
 }
 
 function finishSelectionDrag(cancelMove = false) {
-  if (state.selectionDrag?.committed) {
-    const targetX = cancelMove ? state.selectionDrag.originX : state.selectionDrag.targetX;
-    const targetY = cancelMove ? state.selectionDrag.originY : state.selectionDrag.targetY;
+  const selectionDrag = state.selectionDrag;
 
-    stampSelection(state.selectionDrag, targetX, targetY);
-    state.selection = {
-      x: targetX,
-      y: targetY,
-      width: state.selectionDrag.width,
-      height: state.selectionDrag.height,
-      cells: state.selectionDrag.cells.slice(),
-    };
-    persistState();
-    renderAll();
-    setStatus(
-      cancelMove
-        ? "Selection move canceled."
-        : `Selection moved to ${targetX + 1}, ${targetY + 1}.`,
-    );
-  } else if (state.selectionDrag) {
-    renderCanvas();
-    setStatus("Selection ready. Drag inside it to move the block.");
+  if (!selectionDrag) {
+    return;
   }
 
   state.selectionDrag = null;
+
+  if (selectionDrag.floating) {
+    if (cancelMove) {
+      state.selection = {
+        x: selectionDrag.originX,
+        y: selectionDrag.originY,
+        width: selectionDrag.width,
+        height: selectionDrag.height,
+        cells: selectionDrag.cells.slice(),
+        floating: true,
+      };
+      renderAll();
+      setStatus("Floating paste move canceled. The canvas is unchanged.");
+      return;
+    }
+
+    const targetX = selectionDrag.committed
+      ? selectionDrag.targetX
+      : selectionDrag.originX;
+    const targetY = selectionDrag.committed
+      ? selectionDrag.targetY
+      : selectionDrag.originY;
+    commitHistorySnapshot();
+    stampSelection(selectionDrag, targetX, targetY);
+    state.selection = {
+      x: targetX,
+      y: targetY,
+      width: selectionDrag.width,
+      height: selectionDrag.height,
+      cells: selectionDrag.cells.slice(),
+    };
+    persistState();
+    renderAll();
+    setStatus(`Pasted copy placed at ${targetX + 1}, ${targetY + 1}.`);
+    return;
+  }
+
+  if (selectionDrag.committed) {
+    const targetX = cancelMove ? selectionDrag.originX : selectionDrag.targetX;
+    const targetY = cancelMove ? selectionDrag.originY : selectionDrag.targetY;
+
+    stampSelection(selectionDrag, targetX, targetY);
+    state.selection = {
+      x: targetX,
+      y: targetY,
+      width: selectionDrag.width,
+      height: selectionDrag.height,
+      cells: selectionDrag.cells.slice(),
+    };
+    persistState();
+    renderAll();
+    setStatus(cancelMove ? "Selection move canceled." : `Selection moved to ${targetX + 1}, ${targetY + 1}.`);
+  } else {
+    renderCanvas();
+    setStatus("Selection ready. Drag inside it to move the block.");
+  }
 }
 
 function finishSelectionDraft() {
@@ -1033,6 +1085,13 @@ function handlePaintMove(event) {
 
   if (state.tool === "select") {
     if (!state.pointerDown) {
+      if (state.selection?.floating && cellIndex !== null) {
+        const { x, y } = getCoordinates(cellIndex);
+        const target = snapSelectionTarget(x, y, state.selection);
+        state.selection.x = target.x;
+        state.selection.y = target.y;
+      }
+
       renderCanvas();
       return;
     }
