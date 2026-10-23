@@ -1372,7 +1372,7 @@ function resolveBackgroundColor(requestedFormat) {
 }
 
 function buildRasterCanvas(format) {
-  const scale = clamp(Number(elements.exportScale.value) || 4, 1, 64);
+  const scale = clamp(Number(elements.exportScale.value) || 1, 1, 64);
   const exportCanvas = document.createElement("canvas");
   exportCanvas.width = state.width * scale;
   exportCanvas.height = state.height * scale;
