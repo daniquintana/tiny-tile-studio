@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tiny Tile Studio</title>
-    <link rel="stylesheet" href="./styles.css?v=20260925b" />
-    <script src="./app.js?v=20260925b" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=20261023a" />
+    <script src="./app.js?v=20261023a" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -16,7 +16,13 @@
         </div>
 
         <div class="hero-actions">
-          <button id="new-project" class="action-button">New Project</button>
+          <button
+            id="new-project"
+            class="action-button"
+            title="Reset the artwork in the current tab"
+          >
+            Reset Current Tab
+          </button>
           <button id="clear-canvas" class="action-button action-button-muted">
             Clear Grid
           </button>
@@ -272,6 +278,23 @@
         </aside>
 
         <section class="editor-panel panel-card">
+          <div class="document-tabs-shell">
+            <div
+              id="document-tab-list"
+              class="document-tab-list"
+              role="tablist"
+              aria-label="Open pixel art canvases"
+            ></div>
+            <button
+              id="add-document-tab"
+              class="add-document-tab"
+              type="button"
+              title="Open a new blank canvas tab"
+            >
+              + New Tab
+            </button>
+          </div>
+
           <div class="editor-topbar">
             <div class="status-chip-row">
               <span id="grid-status" class="status-chip">16 x 16</span>

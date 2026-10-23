@@ -352,6 +352,109 @@ input[type="color"] {
   gap: 18px;
 }
 
+.document-tabs-shell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(23, 50, 68, 0.1);
+}
+
+.document-tab-list {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 3px 1px 5px;
+  scrollbar-width: thin;
+}
+
+.document-tab {
+  display: inline-flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid rgba(23, 50, 68, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.document-tab.is-active {
+  background: linear-gradient(180deg, #2b566d 0%, #19384c 100%);
+  border-color: transparent;
+  box-shadow: 0 10px 22px rgba(25, 56, 76, 0.18);
+}
+
+.document-tab-button,
+.document-tab-close,
+.add-document-tab {
+  min-height: 40px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-weight: 750;
+}
+
+.document-tab-button {
+  max-width: 190px;
+  padding: 0 10px 0 14px;
+  overflow: hidden;
+  color: #28495b;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-tab-close {
+  width: 38px;
+  padding: 0;
+  color: #6b7e88;
+  font-size: 1.15rem;
+}
+
+.document-tab.is-active .document-tab-button,
+.document-tab.is-active .document-tab-close {
+  color: white;
+}
+
+.document-tab-close:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.document-tab-button:hover,
+.document-tab-close:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.46);
+}
+
+.document-tab.is-active .document-tab-button:hover,
+.document-tab.is-active .document-tab-close:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.add-document-tab {
+  flex: 0 0 auto;
+  padding: 0 15px;
+  border: 1px dashed rgba(23, 50, 68, 0.25);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.48);
+  color: #28495b;
+}
+
+.add-document-tab:hover {
+  border-style: solid;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.document-tab-button:focus-visible,
+.document-tab-close:focus-visible,
+.add-document-tab:focus-visible {
+  outline: 3px solid rgba(255, 122, 89, 0.56);
+  outline-offset: -3px;
+}
+
 .editor-topbar {
   display: flex;
   align-items: flex-start;
@@ -469,6 +572,15 @@ input[type="color"] {
 
   .editor-topbar {
     flex-direction: column;
+  }
+
+  .document-tabs-shell {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .add-document-tab {
+    width: 100%;
   }
 
   .canvas-wrap {

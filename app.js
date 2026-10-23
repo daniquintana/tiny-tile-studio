@@ -59,6 +59,8 @@ const elements = {
   pointerStatus: document.querySelector("#pointer-status"),
   statusMessage: document.querySelector("#status-message"),
   presetButtons: [...document.querySelectorAll("[data-preset-size]")],
+  documentTabList: document.querySelector("#document-tab-list"),
+  addDocumentTab: document.querySelector("#add-document-tab"),
 };
 
 const ctx = elements.canvas.getContext("2d");
@@ -83,6 +85,8 @@ const state = {
   selectionDrag: null,
   selectionClipboard: null,
   fileName: "tiny-tile-art",
+  documents: [],
+  activeDocumentId: null,
 };
 
 function clamp(value, min, max) {
@@ -440,7 +444,131 @@ function renderPointerStatus() {
   elements.pointerStatus.textContent = `Cell ${x + 1}, ${y + 1}`;
 }
 
+function createDocumentId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `canvas-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function captureCurrentDocument(id = createDocumentId()) {
+  return {
+    id,
+    width: state.width,
+    height: state.height,
+    zoom: state.zoom,
+    showGrid: state.showGrid,
+    snapSize: state.snapSize,
+    tool: state.tool,
+    selectedColor: state.selectedColor,
+    palette: state.palette,
+    cells: state.cells,
+    history: state.history,
+    future: state.future,
+    fileName: state.fileName,
+  };
+}
+
+function syncActiveDocument() {
+  const documentState = state.documents.find(
+    (item) => item.id === state.activeDocumentId,
+  );
+
+  if (!documentState) {
+    return;
+  }
+
+  Object.assign(documentState, captureCurrentDocument(documentState.id));
+}
+
+function loadDocument(documentState) {
+  state.width = documentState.width;
+  state.height = documentState.height;
+  state.zoom = documentState.zoom;
+  state.showGrid = documentState.showGrid;
+  state.snapSize = documentState.snapSize;
+  state.tool = documentState.tool;
+  state.selectedColor = documentState.selectedColor;
+  state.palette = documentState.palette;
+  state.cells = documentState.cells;
+  state.history = documentState.history;
+  state.future = documentState.future;
+  state.fileName = documentState.fileName;
+  state.pointerDown = false;
+  state.lastCellIndex = null;
+  state.hoverCell = null;
+  clearSelection();
+}
+
+function getNextDocumentFileName() {
+  const usedNames = new Set(state.documents.map((item) => item.fileName));
+  let number = state.documents.length + 1;
+  let candidate = `artwork-${number}`;
+
+  while (usedNames.has(candidate)) {
+    number += 1;
+    candidate = `artwork-${number}`;
+  }
+
+  return candidate;
+}
+
+function createBlankDocument() {
+  return {
+    id: createDocumentId(),
+    width: 16,
+    height: 16,
+    zoom: 22,
+    showGrid: true,
+    snapSize: 1,
+    tool: "brush",
+    selectedColor: state.selectedColor,
+    palette: state.palette.slice(),
+    cells: createEmptyCells(16, 16),
+    history: [],
+    future: [],
+    fileName: getNextDocumentFileName(),
+  };
+}
+
+function renderDocumentTabs() {
+  syncActiveDocument();
+  elements.documentTabList.innerHTML = "";
+
+  state.documents.forEach((documentState) => {
+    const wrapper = document.createElement("div");
+    const tabButton = document.createElement("button");
+    const closeButton = document.createElement("button");
+    const isActive = documentState.id === state.activeDocumentId;
+
+    wrapper.className = `document-tab${isActive ? " is-active" : ""}`;
+    wrapper.setAttribute("role", "presentation");
+
+    tabButton.type = "button";
+    tabButton.className = "document-tab-button";
+    tabButton.dataset.documentId = documentState.id;
+    tabButton.setAttribute("role", "tab");
+    tabButton.setAttribute("aria-selected", String(isActive));
+    tabButton.tabIndex = isActive ? 0 : -1;
+    tabButton.title = `${documentState.fileName} — ${documentState.width} x ${documentState.height}`;
+    tabButton.textContent = documentState.fileName;
+
+    closeButton.type = "button";
+    closeButton.className = "document-tab-close";
+    closeButton.dataset.closeDocumentId = documentState.id;
+    closeButton.setAttribute("aria-label", `Close ${documentState.fileName}`);
+    closeButton.title = `Close ${documentState.fileName}`;
+    closeButton.textContent = "×";
+    closeButton.disabled = state.documents.length === 1;
+
+    wrapper.append(tabButton, closeButton);
+    elements.documentTabList.append(wrapper);
+  });
+}
+
 function renderAll() {
+  renderDocumentTabs();
   syncInputsFromState();
   renderSelectedColor();
   renderPalette();
@@ -452,18 +580,28 @@ function renderAll() {
   elements.pasteSelectionButton.disabled = !state.selectionClipboard;
 }
 
+function serializeDocument(documentState) {
+  return {
+    id: documentState.id,
+    width: documentState.width,
+    height: documentState.height,
+    zoom: documentState.zoom,
+    showGrid: documentState.showGrid,
+    snapSize: documentState.snapSize,
+    tool: documentState.tool,
+    selectedColor: documentState.selectedColor,
+    palette: documentState.palette,
+    cells: documentState.cells,
+    fileName: documentState.fileName,
+  };
+}
+
 function persistState() {
+  syncActiveDocument();
   const payload = {
-    width: state.width,
-    height: state.height,
-    zoom: state.zoom,
-    showGrid: state.showGrid,
-    snapSize: state.snapSize,
-    tool: state.tool,
-    selectedColor: state.selectedColor,
-    palette: state.palette,
-    cells: state.cells,
-    fileName: state.fileName,
+    version: 2,
+    activeDocumentId: state.activeDocumentId,
+    documents: state.documents.map(serializeDocument),
   };
 
   try {
@@ -471,6 +609,50 @@ function persistState() {
   } catch (error) {
     console.warn("Unable to persist project locally", error);
   }
+}
+
+function normalizeStoredDocument(documentData, fallbackFileName) {
+  const width = clamp(Number(documentData.width) || 16, 1, MAX_GRID_SIZE);
+  const height = clamp(Number(documentData.height) || 16, 1, MAX_GRID_SIZE);
+
+  if (!isGridSizeAllowed(width, height)) {
+    throw new Error(gridLimitMessage(width, height));
+  }
+
+  const storedCells = Array.isArray(documentData.cells)
+    ? documentData.cells.slice(0, width * height)
+    : [];
+  const storedPalette = Array.isArray(documentData.palette)
+    ? [...new Set(documentData.palette
+        .map((item) => normalizeHex(item || ""))
+        .filter(Boolean))]
+    : [...DEFAULT_PALETTE];
+
+  return {
+    id: typeof documentData.id === "string" && documentData.id
+      ? documentData.id
+      : createDocumentId(),
+    width,
+    height,
+    zoom: getSafeZoom(width, height, Number(documentData.zoom) || 22),
+    showGrid: documentData.showGrid !== false,
+    snapSize: normalizeSnapSize(documentData.snapSize),
+    tool: ["brush", "eraser", "eyedropper", "select"].includes(documentData.tool)
+      ? documentData.tool
+      : "brush",
+    selectedColor: normalizeHex(documentData.selectedColor || "") || "#ff6f91",
+    palette: [
+      ...DEFAULT_PALETTE,
+      ...storedPalette.filter((color) => !DEFAULT_PALETTE.includes(color)),
+    ],
+    cells: createEmptyCells(width, height).map((_, index) => {
+      const value = storedCells[index];
+      return normalizeHex(value || "") || null;
+    }),
+    history: [],
+    future: [],
+    fileName: sanitizeFileName(documentData.fileName || fallbackFileName),
+  };
 }
 
 function restoreState() {
@@ -483,41 +665,48 @@ function restoreState() {
     setStatus("Local auto-save is unavailable in this browser.");
   }
 
-  if (!saved) {
-    return;
-  }
-
   try {
-    const parsed = JSON.parse(saved);
-    const width = clamp(Number(parsed.width) || 16, 1, MAX_GRID_SIZE);
-    const height = clamp(Number(parsed.height) || 16, 1, MAX_GRID_SIZE);
-
-    if (!isGridSizeAllowed(width, height)) {
-      throw new Error(gridLimitMessage(width, height));
+    if (!saved) {
+      const initialDocument = captureCurrentDocument();
+      state.documents = [initialDocument];
+      state.activeDocumentId = initialDocument.id;
+      return;
     }
 
-    const cells = Array.isArray(parsed.cells) ? parsed.cells.slice(0, width * height) : [];
+    const parsed = JSON.parse(saved);
+    const restoredDocuments = parsed.version === 2 && Array.isArray(parsed.documents)
+      ? parsed.documents.map((item, index) => (
+          normalizeStoredDocument(item, `artwork-${index + 1}`)
+        ))
+      : [normalizeStoredDocument(parsed, "tiny-tile-art")];
 
-    state.width = width;
-    state.height = height;
-    state.zoom = getSafeZoom(width, height, Number(parsed.zoom) || 22);
-    state.showGrid = parsed.showGrid !== false;
-    state.snapSize = normalizeSnapSize(parsed.snapSize);
-    state.tool = ["brush", "eraser", "eyedropper", "select"].includes(parsed.tool)
-      ? parsed.tool
-      : "brush";
-    state.selectedColor = normalizeHex(parsed.selectedColor || "") || "#ff6f91";
-    state.palette = Array.isArray(parsed.palette)
-      ? [...new Set(parsed.palette.map((item) => normalizeHex(item || "")).filter(Boolean))]
-      : [...DEFAULT_PALETTE];
-    state.palette = [...DEFAULT_PALETTE, ...state.palette.filter((color) => !DEFAULT_PALETTE.includes(color))];
-    state.fileName = sanitizeFileName(parsed.fileName || "tiny-tile-art");
-    state.cells = createEmptyCells(width, height).map((_, index) => {
-      const value = cells[index];
-      return normalizeHex(value || "") || null;
+    if (restoredDocuments.length === 0) {
+      throw new Error("No saved canvas tabs were found.");
+    }
+
+    const uniqueDocumentIds = new Set();
+    restoredDocuments.forEach((documentState) => {
+      if (uniqueDocumentIds.has(documentState.id)) {
+        documentState.id = createDocumentId();
+      }
+
+      uniqueDocumentIds.add(documentState.id);
     });
+
+    state.documents = restoredDocuments;
+    state.activeDocumentId = restoredDocuments.some(
+      (item) => item.id === parsed.activeDocumentId,
+    )
+      ? parsed.activeDocumentId
+      : restoredDocuments[0].id;
+    loadDocument(
+      restoredDocuments.find((item) => item.id === state.activeDocumentId),
+    );
   } catch (error) {
     console.warn("Unable to restore previous project", error);
+    const initialDocument = captureCurrentDocument();
+    state.documents = [initialDocument];
+    state.activeDocumentId = initialDocument.id;
     setStatus("Could not restore the previous local draft.");
   }
 }
@@ -1474,6 +1663,68 @@ function importFile(file) {
   setStatus("Choose a PNG image or a Tiny Tile Studio project JSON file.");
 }
 
+function switchDocument(documentId) {
+  if (documentId === state.activeDocumentId) {
+    return;
+  }
+
+  syncActiveDocument();
+  const nextDocument = state.documents.find((item) => item.id === documentId);
+
+  if (!nextDocument) {
+    return;
+  }
+
+  state.activeDocumentId = documentId;
+  loadDocument(nextDocument);
+  persistState();
+  renderAll();
+  setStatus(`Switched to ${nextDocument.fileName}. The copy clipboard is shared across tabs.`);
+}
+
+function addDocument() {
+  syncActiveDocument();
+  const nextDocument = createBlankDocument();
+  state.documents.push(nextDocument);
+  state.activeDocumentId = nextDocument.id;
+  loadDocument(nextDocument);
+  persistState();
+  renderAll();
+  setStatus(`Opened ${nextDocument.fileName}. Copy from any tab and paste here.`);
+}
+
+function closeDocument(documentId) {
+  if (state.documents.length === 1) {
+    setStatus("Keep at least one canvas tab open.");
+    return;
+  }
+
+  syncActiveDocument();
+  const closingIndex = state.documents.findIndex((item) => item.id === documentId);
+
+  if (closingIndex === -1) {
+    return;
+  }
+
+  const closingDocument = state.documents[closingIndex];
+
+  if (!window.confirm(`Close ${closingDocument.fileName}? This removes its locally saved canvas tab.`)) {
+    return;
+  }
+
+  state.documents.splice(closingIndex, 1);
+
+  if (documentId === state.activeDocumentId) {
+    const nextDocument = state.documents[Math.min(closingIndex, state.documents.length - 1)];
+    state.activeDocumentId = nextDocument.id;
+    loadDocument(nextDocument);
+  }
+
+  persistState();
+  renderAll();
+  setStatus(`Closed ${closingDocument.fileName}.`);
+}
+
 function clearGrid() {
   if (!window.confirm("Clear every painted tile and leave the grid transparent?")) {
     return;
@@ -1488,9 +1739,11 @@ function clearGrid() {
 }
 
 function resetProject() {
-  if (!window.confirm("Start a fresh project and remove the current drawing?")) {
+  if (!window.confirm(`Reset ${state.fileName} and remove its drawing? Your other tabs will stay open.`)) {
     return;
   }
+
+  const currentFileName = state.fileName;
 
   state.width = 16;
   state.height = 16;
@@ -1505,10 +1758,10 @@ function resetProject() {
   state.future = [];
   state.hoverCell = null;
   clearSelection();
-  state.fileName = "tiny-tile-art";
+  state.fileName = currentFileName;
   persistState();
   renderAll();
-  setStatus("Fresh project ready.");
+  setStatus(`${currentFileName} was reset. Your other tabs are unchanged.`);
 }
 
 function undo() {
@@ -1582,6 +1835,48 @@ function handleExport(type) {
 }
 
 function bindEvents() {
+  elements.addDocumentTab.addEventListener("click", addDocument);
+  elements.documentTabList.addEventListener("click", (event) => {
+    if (!(event.target instanceof Element)) {
+      return;
+    }
+
+    const closeButton = event.target.closest("[data-close-document-id]");
+
+    if (closeButton) {
+      closeDocument(closeButton.dataset.closeDocumentId);
+      return;
+    }
+
+    const tabButton = event.target.closest("[data-document-id]");
+
+    if (tabButton) {
+      switchDocument(tabButton.dataset.documentId);
+    }
+  });
+  elements.documentTabList.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+      return;
+    }
+
+    const activeIndex = state.documents.findIndex(
+      (item) => item.id === state.activeDocumentId,
+    );
+    const direction = event.key === "ArrowRight" ? 1 : -1;
+    const nextIndex = (
+      activeIndex + direction + state.documents.length
+    ) % state.documents.length;
+    const nextDocument = state.documents[nextIndex];
+
+    event.preventDefault();
+    switchDocument(nextDocument.id);
+    window.requestAnimationFrame(() => {
+      const nextTabButton = [...elements.documentTabList.querySelectorAll("[data-document-id]")]
+        .find((button) => button.dataset.documentId === nextDocument.id);
+      nextTabButton?.focus();
+    });
+  });
+
   elements.applyGrid.addEventListener("click", () => {
     const width = clamp(Number(elements.gridWidth.value) || state.width, 1, MAX_GRID_SIZE);
     const height = clamp(Number(elements.gridHeight.value) || state.height, 1, MAX_GRID_SIZE);
@@ -1666,6 +1961,10 @@ function bindEvents() {
     setStatus(state.showGrid ? "Grid lines are visible." : "Grid lines are hidden.");
   });
 
+  elements.fileName.addEventListener("input", () => {
+    state.fileName = sanitizeFileName(elements.fileName.value);
+    renderDocumentTabs();
+  });
   elements.fileName.addEventListener("change", () => {
     state.fileName = sanitizeFileName(elements.fileName.value);
     persistState();
